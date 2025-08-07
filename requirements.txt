@@ -1,0 +1,8 @@
+scikit-learn==1.6.0
+joblib
+fastapi
+uvicorn
+numpy
+pandas
+psycopg2-binary
+python-dotenv
