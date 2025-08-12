@@ -1,111 +1,108 @@
--- Force UTF-8 decoding on import
-SET client_encoding = 'UTF8';
+-- =========================================
+-- RESET AND RECREATE DATABASE STRUCTURE
+-- =========================================
 
--- UUID generator
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- Step 1: Drop tables in dependency order
+DROP TABLE IF EXISTS audit_logs CASCADE;
+DROP TABLE IF EXISTS exports CASCADE;
+DROP TABLE IF EXISTS project_history CASCADE;
+DROP TABLE IF EXISTS predictions CASCADE;
+DROP TABLE IF EXISTS projects CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS services CASCADE;
+DROP TABLE IF EXISTS departments CASCADE;
 
--- ---------- ENUMS ----------
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
-    CREATE TYPE user_role AS ENUM ('admin', 'manager', 'leader', 'user');
-  END IF;
+-- Step 2: Drop ENUM types
+DROP TYPE IF EXISTS user_role CASCADE;
+DROP TYPE IF EXISTS project_status CASCADE;
+DROP TYPE IF EXISTS risk_level CASCADE;
+DROP TYPE IF EXISTS export_format CASCADE;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'project_status') THEN
-    CREATE TYPE project_status AS ENUM ('planned', 'in_progress', 'done', 'risk');
-  END IF;
+-- Step 3: Recreate ENUM types
+CREATE TYPE user_role AS ENUM ('admin', 'manager', 'leader', 'user');
+CREATE TYPE project_status AS ENUM ('planned', 'in_progress', 'done', 'risk');
+CREATE TYPE risk_level AS ENUM ('low', 'medium', 'high');
+CREATE TYPE export_format AS ENUM ('pdf', 'excel');
 
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'risk_level') THEN
-    CREATE TYPE risk_level AS ENUM ('low', 'medium', 'high');
-  END IF;
+-- Step 4: Recreate tables
 
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'export_format') THEN
-    CREATE TYPE export_format AS ENUM ('pdf', 'excel');
-  END IF;
-END$$;
-
--- ---------- TABLES ----------
-CREATE TABLE IF NOT EXISTS departments (
-  id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+-- Departments
+CREATE TABLE departments (
+  id BIGSERIAL PRIMARY KEY,
   name TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS services (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name          TEXT NOT NULL,
-  department_id UUID REFERENCES departments(id) ON DELETE SET NULL
+-- Services
+CREATE TABLE services (
+  id BIGSERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  department_id BIGINT REFERENCES departments(id) ON DELETE SET NULL
 );
 
-CREATE TABLE IF NOT EXISTS users (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name          TEXT NOT NULL,
-  email         TEXT UNIQUE NOT NULL,
-  role          user_role NOT NULL,
-  department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
-  service_id    UUID REFERENCES services(id) ON DELETE SET NULL,
-  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- Users
+CREATE TABLE users (
+  id BIGSERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  role user_role NOT NULL,
+  department_id BIGINT REFERENCES departments(id) ON DELETE SET NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS projects (
-  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name           TEXT NOT NULL,
-  owner_id       UUID REFERENCES users(id) ON DELETE SET NULL,
-  department_id  UUID REFERENCES departments(id) ON DELETE SET NULL,
-  service_id     UUID REFERENCES services(id) ON DELETE SET NULL,
-  type           TEXT,
-  planned_start  DATE NOT NULL,
-  planned_end    DATE NOT NULL,
-  actual_start   DATE,
-  actual_end     DATE,
-  budget_planned DOUBLE PRECISION NOT NULL,
-  budget_actual  DOUBLE PRECISION,
-  status         project_status DEFAULT 'planned',
-  created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- Projects
+CREATE TABLE projects (
+  id BIGSERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  owner_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  department_id BIGINT REFERENCES departments(id) ON DELETE SET NULL,
+  service_id BIGINT REFERENCES services(id) ON DELETE SET NULL,
+  type TEXT, -- e.g., "Bus scolaire", "FORASS"
+  planned_start DATE NOT NULL,
+  planned_end DATE NOT NULL,
+  actual_start DATE,
+  actual_end DATE,
+  budget_planned FLOAT NOT NULL,
+  budget_actual FLOAT,
+  status project_status DEFAULT 'planned',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS predictions (
-  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id         UUID UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
-  delay_probability  DOUBLE PRECISION CHECK (delay_probability >= 0 AND delay_probability <= 1),
-  budget_overrun_est DOUBLE PRECISION,
-  risk_level         risk_level,
-  shap_values        JSONB,
-  created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- Predictions
+CREATE TABLE predictions (
+  id BIGSERIAL PRIMARY KEY,
+  project_id BIGINT UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
+  delay_probability FLOAT CHECK (delay_probability >= 0 AND delay_probability <= 1),
+  budget_overrun_est FLOAT,
+  risk_level risk_level,
+  shap_values JSONB,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS project_history (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id    UUID REFERENCES projects(id) ON DELETE CASCADE,
-  status        project_status,
-  budget_actual DOUBLE PRECISION,
-  timestamp     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  notes         TEXT
+-- Project History
+CREATE TABLE project_history (
+  id BIGSERIAL PRIMARY KEY,
+  project_id BIGINT REFERENCES projects(id) ON DELETE CASCADE,
+  status project_status,
+  budget_actual FLOAT,
+  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  notes TEXT
 );
 
-CREATE TABLE IF NOT EXISTS exports (
-  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id      UUID REFERENCES users(id) ON DELETE SET NULL,
+-- Exports
+CREATE TABLE exports (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
   filters_used JSONB,
-  format       export_format,
-  timestamp    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  format export_format,
+  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS audit_logs (
-  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id    UUID REFERENCES users(id) ON DELETE SET NULL,
-  project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
-  action     TEXT NOT NULL,
-  timestamp  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- Audit Logs
+CREATE TABLE audit_logs (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  project_id BIGINT REFERENCES projects(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
--- ---------- INDEXES (useful) ----------
-CREATE INDEX IF NOT EXISTS idx_services_department_id  ON services(department_id);
-CREATE INDEX IF NOT EXISTS idx_users_department_id     ON users(department_id);
-CREATE INDEX IF NOT EXISTS idx_users_service_id        ON users(service_id);
-CREATE INDEX IF NOT EXISTS idx_projects_owner_id       ON projects(owner_id);
-CREATE INDEX IF NOT EXISTS idx_projects_department_id  ON projects(department_id);
-CREATE INDEX IF NOT EXISTS idx_projects_service_id     ON projects(service_id);
-CREATE INDEX IF NOT EXISTS idx_predictions_project_id  ON predictions(project_id);
-CREATE INDEX IF NOT EXISTS idx_history_project_id      ON project_history(project_id);
-CREATE INDEX IF NOT EXISTS idx_audit_user_id           ON audit_logs(user_id);
-CREATE INDEX IF NOT EXISTS idx_audit_project_id        ON audit_logs(project_id);

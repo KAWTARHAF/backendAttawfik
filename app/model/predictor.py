@@ -1,30 +1,14 @@
-import os
 import joblib
 import pandas as pd
 
+
+import os
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODELS_DIR = os.path.join(BASE_DIR, "model")
 
+delay_model = joblib.load(os.path.join(BASE_DIR, "delay_prediction_model.pkl"))
+cost_model = joblib.load(os.path.join(BASE_DIR, "cost_prediction_model.pkl"))
 
-def _load_model(filename: str):
-    # Try loading from app/model first, then from current dir as fallback
-    candidates = [
-        os.path.join(MODELS_DIR, filename),
-        os.path.join(BASE_DIR, filename),
-    ]
-    last_exc = None
-    for path in candidates:
-        try:
-            if os.path.exists(path):
-                return joblib.load(path)
-        except Exception as e:
-            last_exc = e
-            continue
-    raise FileNotFoundError(f"Model file not found: {filename} in {candidates}. Last error: {last_exc}")
-
-
-delay_model = _load_model("delay_prediction_model.pkl")
-cost_model = _load_model("cost_prediction_model.pkl")
 
 FEATURE_COLUMNS = [
     "budget",
@@ -39,7 +23,7 @@ FEATURE_COLUMNS = [
     "benefit_cost_ratio",
     "cost_per_day",
     "project_Benefit",
-    "project_Cost",
+    "project_Cost"
 ]
 
 def predict_project_outcomes(data: dict):
@@ -56,7 +40,5 @@ def predict_project_outcomes(data: dict):
     return {
         "delay_probability": round(float(delay_prob), 2),
         "risk_level": delay_risk,
-        "cost_overrun_estimate": round(float(cost_overrun), 2),
+        "cost_overrun_estimate": round(float(cost_overrun), 2)
     }
-
-
