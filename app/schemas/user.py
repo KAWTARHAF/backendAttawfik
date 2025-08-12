@@ -15,10 +15,11 @@ class UserCreate(UserBase):
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
+    email: Optional[EmailStr] = None
     role: Optional[UserRole] = None
     department_id: Optional[int] = None
     password: Optional[str] = Field(default=None, min_length=6)
 
 class UserResponse(UserBase):
-    id: int                      # auto-increment integer
+    id: int
     created_at: datetime

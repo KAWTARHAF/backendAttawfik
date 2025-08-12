@@ -1,39 +1,14 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, Literal, List
 from datetime import datetime
+from app.schemas.user import UserBase , UserCreate,UserResponse,UserRole,UserUpdate
 from fastapi import HTTPException
 from passlib.hash import bcrypt
 from db_init import get_db_connection
 
-UserRole = Literal['admin', 'manager', 'leader', 'user']
-
-# -----------------
-# SCHEMAS
-# -----------------
-class UserBase(BaseModel):
-    name: str
-    email: EmailStr
-    role: UserRole = 'user'
-    department_id: Optional[int] = None
-
-class UserCreate(UserBase):
-    password: str = Field(min_length=6)
-
-class UserUpdate(BaseModel):
-    name: Optional[str] = None
-    email: Optional[EmailStr] = None
-    role: Optional[UserRole] = None
-    department_id: Optional[int] = None
-    password: Optional[str] = Field(default=None, min_length=6)
-
-class UserResponse(UserBase):
-    id: int
-    created_at: datetime
 
 
-# -----------------
-# CONTROLLERS
-# -----------------
+
 def create_user(user_data: UserCreate) -> UserResponse:
     conn = get_db_connection()
     cur = conn.cursor()
